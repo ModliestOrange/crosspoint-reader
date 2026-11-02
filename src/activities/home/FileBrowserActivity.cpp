@@ -16,6 +16,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/library/AddToReadingList.h"
 #include "activities/library/ReadingListActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -24,6 +25,7 @@
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookmarkUtil.h"
+#include "util/ReadingList.h"
 
 namespace fui = freeink::ui;
 
@@ -131,6 +133,10 @@ void FileBrowserActivity::loadFiles() {
       if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
         if (FsHelpers::checkFileExtension(filename, ".bin")) {
+          files.emplace_back(filename);
+        }
+      } else if (mode == Mode::PickBook) {
+        if (FsHelpers::hasReflowableBookExtension(filename) || FsHelpers::hasXtcExtension(filename)) {
           files.emplace_back(filename);
         }
       } else if (FsHelpers::hasReflowableBookExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
@@ -348,8 +354,8 @@ void FileBrowserActivity::activateSelected() {
   const std::string& entry = files[nav.selected];
   bool isDirectory = (entry.back() == '/');
 
-  // Firmware picker: select file -> return path; navigate into directories normally.
-  if (mode == Mode::PickFirmware && !isDirectory) {
+  // Pickers: select file -> return path; navigate into directories normally.
+  if (picking() && !isDirectory) {
     std::string cleanBasePath = basepath;
     if (cleanBasePath.back() != '/') cleanBasePath += "/";
     ActivityResult res{FilePathResult{cleanBasePath + entry}};
@@ -398,20 +404,36 @@ void FileBrowserActivity::showEntryActions() {
     return;
   }
 
-  const bool isDirectory = files[nav.selected].back() == '/';
+  const std::string& entry = files[nav.selected];
+  const bool isDirectory = entry.back() == '/';
+  const bool isBook =
+      !isDirectory && (FsHelpers::hasReflowableBookExtension(entry) || FsHelpers::hasXtcExtension(entry));
+  static constexpr StrId BOOK_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE, StrId::STR_RENAME,
+                                           StrId::STR_ADD_TO_READING_LIST};
   static constexpr StrId FILE_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE, StrId::STR_RENAME};
   static constexpr StrId DIRECTORY_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE};
-  optionPopup.show(StrId::STR_FILENAME, isDirectory ? DIRECTORY_OPTIONS : FILE_OPTIONS, isDirectory ? 2 : 3, 0,
-                   [this](const int index) {
-                     if (index == 0) {
-                       activateSelected();
-                     } else if (index == 1) {
-                       deleteSelected();
-                     } else if (index == 2) {
-                       startRename();
-                     }
-                   });
+  const StrId* options = isDirectory ? DIRECTORY_OPTIONS : isBook ? BOOK_OPTIONS : FILE_OPTIONS;
+  const int optionCount = isDirectory ? 2 : isBook ? 4 : 3;
+  optionPopup.show(StrId::STR_FILENAME, options, optionCount, 0, [this](const int index) {
+    if (index == 0) {
+      activateSelected();
+    } else if (index == 1) {
+      deleteSelected();
+    } else if (index == 2) {
+      startRename();
+    } else if (index == 3) {
+      addSelectedToReadingList();
+    }
+  });
   requestUpdate();
+}
+
+void FileBrowserActivity::addSelectedToReadingList() {
+  if (files.empty() || nav.selected < 0 || nav.selected >= listCount()) return;
+  std::string path = basepath;
+  if (path.back() != '/') path += "/";
+  path += files[nav.selected];
+  startAddToReadingList(*this, renderer, mappedInput, ReadingList::titleForBook(path));
 }
 
 void FileBrowserActivity::deleteSelected() {
@@ -588,8 +610,8 @@ bool FileBrowserActivity::handleButtons() {
         }
 
         requestUpdate();
-      } else if (mode == Mode::PickFirmware) {
-        // Firmware picker at root: cancel back to caller instead of going home.
+      } else if (picking()) {
+        // Picker at root: cancel back to caller instead of going home.
         ActivityResult res;
         res.isCancelled = true;
         setResult(std::move(res));
@@ -690,22 +712,22 @@ void FileBrowserActivity::drawChrome() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  std::string folderName =
-      (mode == Mode::PickFirmware)
-          ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
-          : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
+  std::string folderName = (mode == Mode::PickFirmware) ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
+                           : (mode == Mode::PickBook)   ? std::string(tr(STR_READING_LIST_CHOOSE_BOOK))
+                           : (basepath == "/")          ? std::string(tr(STR_SD_CARD))
+                                                        : basepath.substr(basepath.rfind('/') + 1);
   // Header via GUI.drawHeader (already FreeInkUI-themed) for the battery
   // indicator; the rest of the screen renders through the app.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 }
 
 void FileBrowserActivity::drawFooter() {
-  const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
-  // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
+  const char* backLabel = (basepath == "/") ? (picking() ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
+  // In the pickers, Confirm on a file returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && nav.selected >= 0 &&
-                                     nav.selected < listCount() && files[nav.selected].back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  const bool selectingFile = picking() && !files.empty() && nav.selected >= 0 && nav.selected < listCount() &&
+                             files[nav.selected].back() != '/';
+  const char* confirmLabel = files.empty() ? "" : (selectingFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

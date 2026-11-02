@@ -41,4 +41,20 @@ bool readingListTitleMatches(std::string_view foldedEntry, std::string_view fold
 // File name without folder and extension.
 std::string_view readingListFileStem(std::string_view path);
 
+// Folder the Reading Lists screen shows and new lists are created in.
+inline constexpr const char* READING_LISTS_FOLDER = "/Reading Lists";
+
+// A list name made safe as a FAT file stem: characters FAT rejects become
+// spaces, runs of spaces collapse, and leading/trailing spaces and dots go.
+// Empty when nothing usable is left.
+std::string sanitizeReadingListName(std::string_view name);
+
+// Whether `content` already holds an entry for this title (compared folded, so
+// case and punctuation do not matter).
+bool readingListHasTitle(std::string_view content, std::string_view title);
+
+// `content` with `line` appended as its own line, adding the missing newline
+// before it when the file does not end in one.
+std::string appendReadingListLine(std::string_view content, std::string_view line);
+
 }  // namespace library

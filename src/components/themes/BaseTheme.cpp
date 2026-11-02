@@ -725,9 +725,15 @@ int BaseTheme::getMenuRowHeight(const GfxRenderer&) const { return UITheme::getI
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
-  for (int i = 0; i < buttonCount; ++i) {
-    const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
-                      static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+  // Rows that fit above the button hints; the menu pages when there are more
+  // (e.g. with Reading Lists plus an OPDS/Plugins slot in portrait).
+  const int rowStep = BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing;
+  const int firstRowY = BaseMetrics::values.verticalSpacing + rect.y;
+  const int bottomLimit = renderer.getScreenHeight() - BaseMetrics::values.buttonHintsHeight;
+  const int pageItems = std::max(1, (bottomLimit - firstRowY + BaseMetrics::values.menuSpacing) / rowStep);
+  const int pageStart = (std::max(0, selectedIndex) / pageItems) * pageItems;
+  for (int i = pageStart; i < buttonCount && i < pageStart + pageItems; ++i) {
+    const int tileY = firstRowY + (i - pageStart) * rowStep;
 
     const bool selected = selectedIndex == i;
 

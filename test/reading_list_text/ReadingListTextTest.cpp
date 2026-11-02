@@ -61,3 +61,26 @@ TEST(ReadingListText, FileStemDropsFolderAndExtension) {
   EXPECT_EQ(readingListFileStem("Plain"), "Plain");
   EXPECT_EQ(readingListFileStem("/a.b/.hidden"), ".hidden");
 }
+
+TEST(ReadingListText, SanitizesListNamesForFat) {
+  EXPECT_EQ(library::sanitizeReadingListName("  Warcraft: Order  "), "Warcraft Order");
+  EXPECT_EQ(library::sanitizeReadingListName("a/b\\c*d?e\"f<g>h|i"), "a b c d e f g h i");
+  EXPECT_EQ(library::sanitizeReadingListName("..hidden.."), "hidden");
+  EXPECT_EQ(library::sanitizeReadingListName(" ?* "), "");
+  EXPECT_EQ(library::sanitizeReadingListName("Mistborn Era 2"), "Mistborn Era 2");
+}
+
+TEST(ReadingListText, FindsExistingTitleIgnoringCaseAndPunctuation) {
+  const std::string content = "# list\nRise of the Horde\nVol'jin: Shadows of the Horde\n";
+  EXPECT_TRUE(library::readingListHasTitle(content, "rise of the horde"));
+  EXPECT_TRUE(library::readingListHasTitle(content, "Vol'jin - Shadows of the Horde"));
+  EXPECT_FALSE(library::readingListHasTitle(content, "Tides of Darkness"));
+  EXPECT_FALSE(library::readingListHasTitle(content, "# list"));
+  EXPECT_FALSE(library::readingListHasTitle(content, ""));
+}
+
+TEST(ReadingListText, AppendsOnItsOwnLine) {
+  EXPECT_EQ(library::appendReadingListLine("", "A"), "A\n");
+  EXPECT_EQ(library::appendReadingListLine("A\n", "B"), "A\nB\n");
+  EXPECT_EQ(library::appendReadingListLine("A", "B"), "A\nB\n");
+}
