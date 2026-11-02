@@ -1,5 +1,9 @@
 #include "ReadingListText.h"
 
+#include <algorithm>
+
+#include "LibraryText.h"
+
 namespace library {
 
 namespace {
@@ -29,9 +33,7 @@ void splitReadingListLines(std::string_view content, std::vector<std::string>& o
 
 std::string resolveReadingListPath(const std::string_view listFolder, const std::string_view entry) {
   std::string relative(entry);
-  for (char& c : relative) {
-    if (c == '\\') c = '/';
-  }
+  std::replace(relative.begin(), relative.end(), '\\', '/');
   if (!relative.empty() && relative.front() == '/') return relative;
   while (relative.compare(0, 2, "./") == 0) relative.erase(0, 2);
 
@@ -57,6 +59,43 @@ std::string_view readingListFileStem(std::string_view path) {
   const size_t dot = path.find_last_of('.');
   if (dot != std::string_view::npos && dot > 0) path = path.substr(0, dot);
   return path;
+}
+
+std::string sanitizeReadingListName(const std::string_view name) {
+  std::string out;
+  out.reserve(name.size());
+  bool pendingSpace = false;
+  for (const char c : name) {
+    const auto byte = static_cast<unsigned char>(c);
+    const bool rejected = byte < 0x20 || std::string_view("\\/:*?\"<>|").find(c) != std::string_view::npos;
+    if (rejected || c == ' ' || c == '\t') {
+      pendingSpace = !out.empty();
+      continue;
+    }
+    if (pendingSpace) out.push_back(' ');
+    pendingSpace = false;
+    out.push_back(c);
+  }
+  // FAT drops trailing dots, so a stem ending in one would not round-trip.
+  while (!out.empty() && (out.back() == '.' || out.back() == ' ')) out.pop_back();
+  while (!out.empty() && out.front() == '.') out.erase(0, 1);
+  return out;
+}
+
+bool readingListHasTitle(const std::string_view content, const std::string_view title) {
+  const std::string wanted = fold(title);
+  if (wanted.empty()) return false;
+  std::vector<std::string> lines;
+  splitReadingListLines(content, lines, READING_LIST_MAX_ENTRIES);
+  return std::any_of(lines.begin(), lines.end(), [&wanted](const std::string& line) { return fold(line) == wanted; });
+}
+
+std::string appendReadingListLine(const std::string_view content, const std::string_view line) {
+  std::string out(content);
+  if (!out.empty() && out.back() != '\n') out.push_back('\n');
+  out.append(line);
+  out.push_back('\n');
+  return out;
 }
 
 }  // namespace library

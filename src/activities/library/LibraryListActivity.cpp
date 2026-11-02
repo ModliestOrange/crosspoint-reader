@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "AddToReadingList.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -280,33 +281,37 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     }
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  // Each row lists the actions it offers; the popup returns an index into it.
+  enum class Action : uint8_t { Open, AddToList, RemoveFromRecents, Delete, Rebuild };
+  static constexpr Action STORE_ACTIONS[] = {Action::Open, Action::AddToList, Action::RemoveFromRecents, Action::Delete,
+                                             Action::Rebuild};
+  static constexpr Action INDEX_ACTIONS[] = {Action::Open, Action::AddToList, Action::Delete, Action::Rebuild};
+  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_ADD_TO_READING_LIST), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE),
+                                 tr(STR_LIBRARY_REBUILD)};
+  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_ADD_TO_READING_LIST), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  static_assert(sizeof(STORE_ACTIONS) / sizeof(STORE_ACTIONS[0]) == 5, "STORE_OPTIONS matches STORE_ACTIONS");
+  static_assert(sizeof(INDEX_ACTIONS) / sizeof(INDEX_ACTIONS[0]) == 4, "INDEX_OPTIONS matches INDEX_ACTIONS");
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 5 : 4, 0,
                    [this, path, title, isStoreRow](const int choice) {
                      swallowHeldReleases();
-                     switch (choice) {
-                       case 0:
+                     const int count = isStoreRow ? 5 : 4;
+                     if (choice < 0 || choice >= count) return;
+                     switch (isStoreRow ? STORE_ACTIONS[choice] : INDEX_ACTIONS[choice]) {
+                       case Action::Open:
                          openBookByPath(path);
                          break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
+                       case Action::AddToList:
+                         startAddToReadingList(*this, renderer, mappedInput, title);
                          break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
+                       case Action::RemoveFromRecents:
+                         promptRemoveRecentBook(path, title);
                          break;
-                       case 3:
-                         if (isStoreRow) promptRebuildIndex();
+                       case Action::Delete:
+                         promptDeleteBookByPath(path, title);
                          break;
-                       default:
+                       case Action::Rebuild:
+                         promptRebuildIndex();
                          break;
                      }
                    });
