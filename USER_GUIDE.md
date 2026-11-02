@@ -123,6 +123,30 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 * **Open Selection:** Press **Confirm** to open a folder or start reading a selected book. Selecting a `.bmp` file will open the image viewer.
 * **Delete Files or Folders:** Hold and release **Confirm** to delete the selected file or folder. You will be given an option to either confirm or cancel. Multiple files can be selected for deletion in a single operation.
 * **Rename or Move:** Files can be renamed or moved to a different folder from within the browse screen.
+* **Reading Lists:** Selecting a `.readinglist` file opens its books as one numbered list, in the file's order, even when they are in different folders or series. Press **Confirm** on a book to read it. Books that are not on the card are marked **Not on card**.
+* **Add to Reading List:** Hold **Confirm** on a book and choose **Add to reading list** to add its title to an existing list or a new one.
+
+#### Reading list files
+
+A reading list is a plain UTF-8 text file ending in `.readinglist`, with one book per line. Blank lines and lines starting with `#` are ignored.
+
+* A line ending in a book extension (for example `.epub`) is a file path. It can be absolute (`/Books/War Crimes.epub`) or relative to the folder the list is in.
+* Any other line is a book title. It is matched against the Library index: a book matches when its title is the same, or when its file name ends with that title (`Warcraft Second War 01 - Rise of the Horde.epub` matches `Rise of the Horde`). Case and punctuation are ignored. The Library index is built first if it is missing or out of date.
+
+```
+# Warcraft reading order
+Rise of the Horde
+The Last Guardian
+/Books/Warcraft/Tides of Darkness.epub
+```
+
+A list holds up to 200 books and 16 KB of text.
+
+#### Reading Lists screen
+
+**Home → Reading Lists** shows every `.readinglist` file in the `/Reading Lists` folder, with how many of its books you have finished (for example `3/27`). Press **Confirm** on a list to open it, or choose **New list...** to name and create an empty one.
+
+Inside a list, books you have finished are marked **Read**, and books you are partway through show their percentage. You can add books from **Browse Files** (hold **Confirm** on a book) or from the **Recent** tab of the **Library** screen (hold **Confirm**, then **Add to reading list**). A book is added by its title, so the list keeps finding it if the file is moved or renamed.
 
 ### 3.4 Library Screen
 

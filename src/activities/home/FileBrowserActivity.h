@@ -66,6 +66,7 @@ class FileBrowserActivity final : public UiListActivity {
   void drawChrome() override;
   void drawFooter() override;
   void activateSelected();
+  void openReadingList(const std::string& path);
 
   // Data loading
   void loadFiles();
