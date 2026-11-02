@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
+#include <ReadingListText.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -15,6 +16,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/library/ReadingListActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -132,7 +134,8 @@ void FileBrowserActivity::loadFiles() {
           files.emplace_back(filename);
         }
       } else if (FsHelpers::hasReflowableBookExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-                 FsHelpers::hasImageExtension(filename)) {
+                 FsHelpers::hasImageExtension(filename) ||
+                 FsHelpers::checkFileExtension(filename, library::READING_LIST_EXTENSION)) {
         files.emplace_back(filename);
       }
     }
@@ -371,8 +374,22 @@ void FileBrowserActivity::activateSelected() {
   } else {
     const std::string fullPath = basepath + entry;
     lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
+    if (FsHelpers::checkFileExtension(entry, library::READING_LIST_EXTENSION)) {
+      openReadingList(fullPath);
+      return;
+    }
     onSelectBook(fullPath);
   }
+}
+
+void FileBrowserActivity::openReadingList(const std::string& path) {
+  auto list = makeUniqueNoThrow<ReadingListActivity>(renderer, mappedInput, path);
+  if (!list) {
+    LOG_ERR("FileBrowser", "OOM: reading list");
+    return;
+  }
+  // The list may leave for the reader; coming back just repaints the folder.
+  startActivityForResult(std::move(list), [](const ActivityResult&) {});
 }
 
 void FileBrowserActivity::showEntryActions() {
