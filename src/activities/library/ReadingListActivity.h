@@ -5,6 +5,10 @@
 
 #include "activities/UiListActivity.h"
 
+namespace library {
+class LibraryIndexFile;
+}
+
 // Opens a `.readinglist` file from the file browser and shows its books in the
 // file's order, whatever folder or series each one is in. Path entries open
 // that file; title entries are matched against the Library index once, on
@@ -18,8 +22,9 @@ class ReadingListActivity final : public UiListActivity {
 
  private:
   struct Entry {
-    std::string label;  // the line as written in the list
-    std::string path;   // resolved book path; empty when not on the card
+    std::string label;     // the line as written in the list
+    std::string path;      // resolved book path; empty when not on the card
+    bool byTitle = false;  // matched through the Library index, not a path line
   };
 
   int listCount() const override { return static_cast<int>(entries.size()); }
@@ -30,6 +35,9 @@ class ReadingListActivity final : public UiListActivity {
   void loadEntries();
   // Fill in paths for title entries with one pass over the Library index.
   void resolveTitles();
+  // One pass over the index. Returns true when a matched book is no longer on
+  // the card, which means the index is out of date.
+  bool matchTitles(library::LibraryIndexFile& index);
 
   static void provideRow(void* ctx, uint16_t index, freeink::ui::ListItem& item);
 

@@ -10,6 +10,7 @@
 #include <Logging.h>
 #include <ReadingListText.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
@@ -34,12 +35,10 @@ void ReadingListActivity::onEnter() {
   loadEntries();
 
   // Reopen on the book read last, so the list doubles as a "what's next".
-  for (size_t i = 0; i < entries.size(); ++i) {
-    if (!entries[i].path.empty() && entries[i].path == APP_STATE.openEpubPath) {
-      nav.reset(static_cast<int>(i));
-      break;
-    }
-  }
+  const auto lastRead = std::find_if(entries.begin(), entries.end(), [](const Entry& entry) {
+    return !entry.path.empty() && entry.path == APP_STATE.openEpubPath;
+  });
+  if (lastRead != entries.end()) nav.reset(static_cast<int>(lastRead - entries.begin()));
   requestUpdate(true);
 }
 
@@ -75,6 +74,7 @@ void ReadingListActivity::loadEntries() {
       entry.label = std::string(library::readingListFileStem(line));
     } else {
       entry.label = std::move(line);
+      entry.byTitle = true;
       hasTitles = true;
     }
     entries.push_back(std::move(entry));
@@ -83,30 +83,50 @@ void ReadingListActivity::loadEntries() {
 }
 
 void ReadingListActivity::resolveTitles() {
-  library::LibraryIndexFile index;
   const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
-  if (library::isLibraryIndexDirty() || !index.open(library::libraryIndexPath()) ||
-      index.header().metadataEnabled != readMetadata) {
-    index.close();
-    GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
-    library::BuildStats stats;
-    if (!library::buildLibraryIndex("/", stats, readMetadata) || !index.open(library::libraryIndexPath())) {
-      LOG_ERR("ReadingList", "library index unavailable");
-      return;
+  bool rebuildNeeded = library::isLibraryIndexDirty();
+  // Two passes at most: an index that points at moved or deleted files is
+  // rebuilt once and the titles are matched again.
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    library::LibraryIndexFile index;
+    if (!rebuildNeeded &&
+        (!index.open(library::libraryIndexPath()) || index.header().metadataEnabled != readMetadata)) {
+      rebuildNeeded = true;
     }
+    if (rebuildNeeded) {
+      index.close();
+      GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+      library::BuildStats stats;
+      if (!library::buildLibraryIndex("/", stats, readMetadata) || !index.open(library::libraryIndexPath())) {
+        LOG_ERR("ReadingList", "library index unavailable");
+        return;
+      }
+    }
+    const bool stale = matchTitles(index);
+    index.close();
+    if (!stale || rebuildNeeded) return;
+    LOG_INF("ReadingList", "library index is stale; rebuilding");
+    for (auto& entry : entries) {
+      if (entry.byTitle) entry.path.clear();
+    }
+    rebuildNeeded = true;
   }
+}
 
+bool ReadingListActivity::matchTitles(library::LibraryIndexFile& index) {
   // Fold each wanted title once; the index pass below compares folded text.
   std::vector<std::string> wanted(entries.size());
   size_t unresolved = 0;
   for (size_t i = 0; i < entries.size(); ++i) {
-    if (!entries[i].path.empty() || isBookPath(entries[i].label)) continue;
+    if (!entries[i].byTitle || !entries[i].path.empty()) continue;
     wanted[i] = library::fold(entries[i].label);
     if (!wanted[i].empty()) ++unresolved;
   }
 
+  bool stale = false;
   std::string name;
   std::string bookTitle;
+  std::string path;
   const uint16_t count = index.bookCount();
   for (uint16_t ordinal = 0; ordinal < count && unresolved > 0; ++ordinal) {
     library::ClixRecord record;
@@ -115,14 +135,22 @@ void ReadingListActivity::resolveTitles() {
     }
     const std::string foldedTitle = library::fold(bookTitle);
     const std::string foldedStem = library::fold(library::readingListFileStem(name));
+    bool pathChecked = false;
+    bool pathExists = false;
     for (size_t i = 0; i < entries.size(); ++i) {
       if (wanted[i].empty() || !library::readingListTitleMatches(wanted[i], foldedTitle, foldedStem)) continue;
-      if (!index.readPath(record, entries[i].path)) continue;
+      if (!pathChecked) {
+        pathChecked = true;
+        pathExists = index.readPath(record, path) && Storage.exists(path.c_str());
+        if (!pathExists) stale = true;
+      }
+      if (!pathExists) continue;
+      entries[i].path = path;
       wanted[i].clear();
       --unresolved;
     }
   }
-  index.close();
+  return stale;
 }
 
 void ReadingListActivity::provideRow(void* ctx, const uint16_t index, fui::ListItem& item) {
