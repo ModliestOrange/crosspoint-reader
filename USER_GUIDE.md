@@ -124,6 +124,7 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 * **Delete Files or Folders:** Hold and release **Confirm** to delete the selected file or folder. You will be given an option to either confirm or cancel. Multiple files can be selected for deletion in a single operation.
 * **Rename or Move:** Files can be renamed or moved to a different folder from within the browse screen.
 * **Reading Lists:** Selecting a `.readinglist` file opens its books as one numbered list, in the file's order, even when they are in different folders or series. Press **Confirm** on a book to read it. Books that are not on the card are marked **Not on card**.
+* **Add to Reading List:** Hold **Confirm** on a book and choose **Add to reading list** to add its title to an existing list or a new one.
 
 #### Reading list files
 
@@ -140,6 +141,12 @@ The Last Guardian
 ```
 
 A list holds up to 200 books and 16 KB of text.
+
+#### Reading Lists screen
+
+**Home → Reading Lists** shows every `.readinglist` file in the `/Reading Lists` folder, with how many of its books you have finished (for example `3/27`). Press **Confirm** on a list to open it, or choose **New list...** to name and create an empty one.
+
+Inside a list, books you have finished are marked **Read**, and books you are partway through show their percentage. You can add books from **Browse Files** (hold **Confirm** on a book) or from the **Recent** tab of the **Library** screen (hold **Confirm**, then **Add to reading list**). A book is added by its title, so the list keeps finding it if the file is moved or renamed.
 
 ### 3.4 Library Screen
 
